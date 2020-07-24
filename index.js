@@ -1,3 +1,4 @@
+require('dotenv').config()
 const axios = require('axios').default;
 const fs = require('fs');
 
@@ -242,7 +243,7 @@ for (let index = 0; index < queries.length; index++) {
     addToLog(`Pesquisando ${queries[index]}...`)
     let result = await axios.put('https://api.elsevier.com/content/search/sciencedirect',
       { "title": queries[index], "qs": queries[index] },
-      { headers: { 'X-ELS-APIKey': 'f85cb161d164cf0f7c7894e939d5e43d' } }
+      { headers: { 'X-ELS-APIKey': process.env.SCIENCEDIRECT_APIKEY } }
     )
     if (result.data.results) {
       addToLog(`${result.data.results.length} resultados encontrados para ${queries[index]}.`)
@@ -250,7 +251,6 @@ for (let index = 0; index < queries.length; index++) {
       let duplicates = 0;
       result.data.results.forEach((result) => {
         if (!finalResults.some(finalResult => (finalResult.title === result.title || finalResult.doi === result.doi || finalResult.pii === result.pii))) {
-          // if (!finalResults.some(finalResult => finalResult.title === result.title)) {
           finalResults.push(result)
           added++
         }
@@ -258,7 +258,6 @@ for (let index = 0; index < queries.length; index++) {
           duplicates++
       })
       addToLog(`Houve ${added} resultados novos. ${duplicates} resultados já existentes foram ignorados.`)
-      // finalResults.push(...result.data.results)
     } else {
       addToLog(`Nenhum resultado encontrado para ${queries[index]}.`)
     }

@@ -20,16 +20,19 @@ Artigos duplicados entre as palavras-chave são ignorados.
 <br />
 
 ## Instruções
-1. Após clonar ou baixar o projeto, execute `yarn` para efetuar o download das dependências necessárias.
-2. Insira os termos da busca no *array* `queries`.
-3. No diretório do projeto, execute `node index.js` para rodar a aplicação e efetuar as buscas.
-4. Ao finalizar, serão gerados dois arquivos:
-   - **Resultados.txt**, que conterá todos os artigos encontrados nas buscas.
+1. Crie uma conta e obtenha a Chave da API da Elsevier através do [Elsevier Developer Portal](https://dev.elsevier.com/apikey/manage).
+2. Clone ou baixe o projeto e execute `yarn` para efetuar o download das dependências necessárias.
+3. No diretório raiz do projeto, crie um arquivo `.env` e insira a Chave da API obtida do primeiro passo através da chave `SCIENCEDIRECT_APIKEY`.	
+	- Exemplo: `SCIENCEDIRECT_APIKEY=SUA-CHAVE-DE-API-AQUI`
+4. Insira os termos da busca no *array* `queries`.
+5. No diretório raiz do projeto, execute `yarn start` ou `node index.js` para rodar a aplicação e efetuar as buscas.
+6. Ao finalizar, serão gerados dois arquivos:
+	- **Resultados.txt**, que conterá todos os artigos encontrados nas buscas.
    - **Resultados_log.txt**, que conterá o passo-a-passo das buscas (*log*).
    
 <br />
    
-## Exemplo de *Output*
+## Exemplos de *Output*
 ### `Resultados.txt`
 ```
 ==================================================
