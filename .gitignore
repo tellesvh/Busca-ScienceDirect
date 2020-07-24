@@ -102,3 +102,7 @@ dist
 
 # TernJS port file
 .tern-port
+
+# Arquivos Finais
+Resultados.txt
+Resultados_log.txt
