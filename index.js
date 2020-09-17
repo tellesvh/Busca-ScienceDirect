@@ -241,31 +241,35 @@ for (let index = 0; index < queries.length; index++) {
   setTimeout(async () => {
     console.log(`=== ${(((index + 1) / queries.length) * 100).toFixed(2)}% Concluído ===`)
     addToLog(`Pesquisando ${queries[index]}...`)
-    let result = await axios.put('https://api.elsevier.com/content/search/sciencedirect',
-      { "title": queries[index], "qs": queries[index] },
-      { headers: { 'X-ELS-APIKey': process.env.SCIENCEDIRECT_APIKEY } }
-    )
-    if (result.data.results) {
-      addToLog(`${result.data.results.length} resultados encontrados para ${queries[index]}.`)
-      let added = 0;
-      let duplicates = 0;
-      result.data.results.forEach((result) => {
-        if (!finalResults.some(finalResult => (finalResult.title === result.title || finalResult.doi === result.doi || finalResult.pii === result.pii))) {
-          finalResults.push(result)
-          added++
-        }
-        else
-          duplicates++
-      })
-      addToLog(`Houve ${added} resultados novos. ${duplicates} resultados já existentes foram ignorados.`)
-    } else {
-      addToLog(`Nenhum resultado encontrado para ${queries[index]}.`)
-    }
+    try {
+      let result = await axios.put('https://api.elsevier.com/content/search/sciencedirect',
+        { "title": queries[index], "qs": queries[index] },
+        { headers: { 'X-ELS-APIKey': process.env.SCIENCEDIRECT_APIKEY } }
+      )
+      if (result.data.results) {
+        addToLog(`${result.data.results.length} resultados encontrados para ${queries[index]}.`)
+        let added = 0;
+        let duplicates = 0;
+        result.data.results.forEach((result) => {
+          if (!finalResults.some(finalResult => (finalResult.title === result.title || finalResult.doi === result.doi || finalResult.pii === result.pii))) {
+            finalResults.push(result)
+            added++
+          }
+          else
+            duplicates++
+        })
+        addToLog(`Houve ${added} resultados novos. ${duplicates} resultados já existentes foram ignorados.`)
+      } else {
+        addToLog(`Nenhum resultado encontrado para ${queries[index]}.`)
+      }
 
-    addToLog("\n")
+      addToLog("\n")
 
-    if (index === queries.length - 1) {
-      saveFinalResults();
+      if (index === queries.length - 1) {
+        saveFinalResults();
+      }
+    } catch (ex) {
+      console.log(ex.response.data)
     }
   }, index * 2000)
 }
