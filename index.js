@@ -1,6 +1,7 @@
 require('dotenv').config()
 const axios = require('axios').default;
 const fs = require('fs');
+const sleep = ms => new Promise(res => setTimeout(res, ms));
 
 const queries = [
   "Adenomatoid odontogenic tumour AND Ameloblastic fibro-odontoma",
@@ -235,57 +236,188 @@ const queries = [
 ]
 
 let finalResults = []
+let duplicatedResults = []
+let allResults = 0;
+let allDuplicatedResults = 0;
 let txtLog = "";
 
-for (let index = 0; index < queries.length; index++) {
-  setTimeout(async () => {
+const addToLog = function (message) {
+  console.log(message)
+  txtLog = txtLog + message + "\n"
+}
+
+const oldSearch = async function () {
+  function saveFinalResults() {
+    let txtString = "";
+
+    txtString = txtString + `==================================================
+${allResults} RESULTADOS PESQUISADOS
+${finalResults.length} RESULTADOS DISTINTOS
+==================================================
+
+`
+
+    finalResults.forEach((result) => {
+      let authors = []
+      if (result.authors && result.authors.author) {
+        try {
+          authors = result.authors.author.map((author) => author['$'])
+        } catch {
+          authors = [result.authors.author]
+        }
+      }
+
+      let loadDate = new Date(result['load-date']);
+      let publicationDate = new Date(result['prism:coverDate']);
+
+      txtString = txtString + `==================================================
+Título: ${result['dc:title']}
+Revista: ${result['prism:publicationName']}
+Volume: ${result['prism:volume']}${authors.length > 0 ? `\nAutores: ${authors.join(', ')}` : ""}
+URL: ${result.link[1]['@href']}
+DOI: ${result['prism:doi']}
+PII: ${result.pii}
+Data de Carregamento: ${("0" + loadDate.getDate()).slice(-2)}/${("0" + (loadDate.getMonth() + 1)).slice(-2)}/${loadDate.getFullYear()}
+Data de Publicação: ${("0" + publicationDate.getDate()).slice(-2)}/${("0" + (publicationDate.getMonth() + 1)).slice(-2)}/${publicationDate.getFullYear()}
+==================================================
+
+`
+    })
+
+    fs.writeFile('Resultados Distintos.txt', txtString, function (err) {
+      if (err) return console.log(err);
+      console.log('Arquivo de RESULTADOS salvo com sucesso!');
+    });
+    fs.writeFile('Resultados_log.txt', txtLog, function (err) {
+      if (err) return console.log(err);
+      console.log('Arquivo de LOG salvo com sucesso!');
+    });
+  }
+
+  function saveDuplicatedResults() {
+    let txtString = "";
+
+    txtString = txtString + `==================================================
+${allDuplicatedResults} RESULTADOS DUPLICADOS
+${duplicatedResults.length} RESULTADOS DUPLICADOS DISTINTOS
+==================================================
+
+`
+
+    duplicatedResults.forEach((result) => {
+      let authors = []
+      if (result.authors && result.authors.author) {
+        try {
+          authors = result.authors.author.map((author) => author['$'])
+        } catch {
+          authors = [result.authors.author]
+        }
+      }
+
+      let loadDate = new Date(result['load-date']);
+      let publicationDate = new Date(result['prism:coverDate']);
+
+      txtString = txtString + `==================================================
+Título: ${result['dc:title']}
+Revista: ${result['prism:publicationName']}
+Volume: ${result['prism:volume']}${authors.length > 0 ? `\nAutores: ${authors.join(', ')}` : ""}
+URL: ${result.link[1]['@href']}
+DOI: ${result['prism:doi']}
+PII: ${result.pii}
+Data de Carregamento: ${("0" + loadDate.getDate()).slice(-2)}/${("0" + (loadDate.getMonth() + 1)).slice(-2)}/${loadDate.getFullYear()}
+Data de Publicação: ${("0" + publicationDate.getDate()).slice(-2)}/${("0" + (publicationDate.getMonth() + 1)).slice(-2)}/${publicationDate.getFullYear()}
+==================================================
+
+`
+    })
+
+    fs.writeFile('Resultados Duplicados Distintos.txt', txtString, function (err) {
+      if (err) return console.log(err);
+      console.log('Arquivo de RESULTADOS DUPLICADOS com sucesso!');
+    });
+  }
+
+  for (let index = 0; index < queries.length; index++) {
     console.log(`=== ${(((index + 1) / queries.length) * 100).toFixed(2)}% Concluído ===`)
     addToLog(`Pesquisando ${queries[index]}...`)
     try {
-      let result = await axios.put('https://api.elsevier.com/content/search/sciencedirect',
-        { "title": queries[index], "qs": queries[index] },
-        { headers: { 'X-ELS-APIKey': process.env.SCIENCEDIRECT_APIKEY } }
-      )
-      if (result.data.results) {
-        addToLog(`${result.data.results.length} resultados encontrados para ${queries[index]}.`)
+      await sleep(1000);
+      let response = await axios.get(`https://api.elsevier.com/content/search/sciencedirect?query=${queries[index]}&apiKey=${process.env.SCIENCEDIRECT_APIKEY}&count=100`);
+      if (response.data['search-results'].entry) {
+
+        let next = response.data['search-results'].link.find((link) => link['@ref'] == "next")
+        if (next) {
+          next = next['@href']
+          _count = 1
+          do {
+            await sleep(1000);
+            addToLog(`Efetuando busca na página ${_count}...`)
+            let _response = await axios.get(next);
+            response.data['search-results'].entry = [...response.data['search-results'].entry, ..._response.data['search-results'].entry]
+            _count++
+
+            next = _response.data['search-results'].link.find((link) => link['@ref'] == "next")
+            if (next)
+              next = next['@href']
+          } while (next !== undefined)
+        }
+
+        addToLog(`${response.data['search-results'].entry.length} resultados encontrados para ${queries[index]}.`)
         let added = 0;
         let duplicates = 0;
-        result.data.results.forEach((result) => {
-          if (!finalResults.some(finalResult => (finalResult.title === result.title || finalResult.doi === result.doi || finalResult.pii === result.pii))) {
+        let newDuplicates = 0;
+        response.data['search-results'].entry.forEach((result) => {
+          allResults++
+          if (!finalResults.some(finalResult => (finalResult['dc:title'] === result['dc:title'] || finalResult['prism:doi'] === result['prism:doi'] || finalResult.pii === result.pii))) {
             finalResults.push(result)
             added++
-          }
-          else
+          } else {
+            if (!duplicatedResults.some(duplicatedResult => (duplicatedResult['dc:title'] === result['dc:title'] || duplicatedResult['prism:doi'] === result['prism:doi'] || duplicatedResult.pii === result.pii))) {
+              duplicatedResults.push(result)
+              newDuplicates++
+            }
             duplicates++
+            allDuplicatedResults++
+          }
         })
-        addToLog(`Houve ${added} resultados novos. ${duplicates} resultados já existentes foram ignorados.`)
+
+        addToLog(`Houve ${added} resultados novos. ${duplicates} resultados já existentes foram ignorados. ${newDuplicates} novas duplicatas foram registradas.`)
       } else {
         addToLog(`Nenhum resultado encontrado para ${queries[index]}.`)
       }
-
-      addToLog("\n")
-
-      if (index === queries.length - 1) {
-        saveFinalResults();
-      }
     } catch (ex) {
+      console.log(ex)
       console.log(ex.response.data)
     }
-  }, index * 2000)
+
+    addToLog("\n")
+
+  }
+
+  saveFinalResults();
+  saveDuplicatedResults();
 }
 
-function saveFinalResults() {
-  let txtString = "";
-
-  finalResults.forEach((result) => {
-    let authors = []
-    if (result.authors)
-      authors = result.authors.map((author) => author.name)
-
-    let loadDate = new Date(result.loadDate);
-    let publicationDate = new Date(result.publicationDate);
+const newSearch = async function () {
+  function saveFinalResults() {
+    let txtString = "";
 
     txtString = txtString + `==================================================
+${allResults} RESULTADOS PESQUISADOS
+${finalResults.length} RESULTADOS DISTINTOS
+==================================================
+
+`
+
+    finalResults.forEach((result) => {
+      let authors = []
+      if (result.authors)
+        authors = result.authors.map((author) => author.name)
+
+      let loadDate = new Date(result.loadDate);
+      let publicationDate = new Date(result.publicationDate);
+
+      txtString = txtString + `==================================================
 Título: ${result.title}
 Revista: ${result.sourceTitle}
 Volume: ${result.volumeIssue}${authors.length > 0 ? `\nAutores: ${authors.join(', ')}` : ""}
@@ -297,19 +429,101 @@ Data de Publicação: ${("0" + publicationDate.getDate()).slice(-2)}/${("0" + (p
 ==================================================
 
 `
-  })
+    })
 
-  fs.writeFile('Resultados.txt', txtString, function (err) {
-    if (err) return console.log(err);
-    console.log('Arquivo salvo com sucesso!');
-  });
-  fs.writeFile('Resultados_log.txt', txtLog, function (err) {
-    if (err) return console.log(err);
-    console.log('Arquivo de log salvo com sucesso!');
-  });
+    fs.writeFile('Resultados Distintos.txt', txtString, function (err) {
+      if (err) return console.log(err);
+      console.log('Arquivo de RESULTADOS salvo com sucesso!');
+    });
+    fs.writeFile('Resultados_log.txt', txtLog, function (err) {
+      if (err) return console.log(err);
+      console.log('Arquivo de LOG salvo com sucesso!');
+    });
+  }
+
+  function saveDuplicatedResults() {
+    let txtString = "";
+
+    txtString = txtString + `==================================================
+${allDuplicatedResults} RESULTADOS DUPLICADOS
+${duplicatedResults.length} RESULTADOS DUPLICADOS DISTINTOS
+==================================================
+
+`
+
+    duplicatedResults.forEach((result) => {
+      let authors = []
+      if (result.authors)
+        authors = result.authors.map((author) => author.name)
+
+      let loadDate = new Date(result.loadDate);
+      let publicationDate = new Date(result.publicationDate);
+
+      txtString = txtString + `==================================================
+Título: ${result.title}
+Revista: ${result.sourceTitle}
+Volume: ${result.volumeIssue}${authors.length > 0 ? `\nAutores: ${authors.join(', ')}` : ""}
+URL: ${result.uri}
+DOI: ${result.doi}
+PII: ${result.pii}
+Data de Carregamento: ${("0" + loadDate.getDate()).slice(-2)}/${("0" + (loadDate.getMonth() + 1)).slice(-2)}/${loadDate.getFullYear()}
+Data de Publicação: ${("0" + publicationDate.getDate()).slice(-2)}/${("0" + (publicationDate.getMonth() + 1)).slice(-2)}/${publicationDate.getFullYear()}
+==================================================
+
+`
+    })
+
+    fs.writeFile('Resultados Duplicados Distintos.txt', txtString, function (err) {
+      if (err) return console.log(err);
+      console.log('Arquivo de RESULTADOS DUPLICADOS com sucesso!');
+    });
+  }
+
+  for (let index = 0; index < queries.length; index++) {
+    console.log(`=== ${(((index + 1) / queries.length) * 100).toFixed(2)}% Concluído ===`)
+    addToLog(`Pesquisando ${queries[index]}...`)
+    try {
+      await sleep(1000);
+      let result = await axios.put('https://api.elsevier.com/content/search/sciencedirect',
+        { "title": queries[index], "qs": queries[index] },
+        { headers: { 'X-ELS-APIKey': process.env.SCIENCEDIRECT_APIKEY } }
+      )
+      if (result.data.results) {
+        addToLog(`${result.data.results.length} resultados encontrados para ${queries[index]}.`)
+        let added = 0;
+        let duplicates = 0;
+        let newDuplicates = 0;
+        result.data.results.forEach((result) => {
+          allResults++
+          if (!finalResults.some(finalResult => (finalResult.title === result.title || finalResult.doi === result.doi || finalResult.pii === result.pii))) {
+            finalResults.push(result)
+            added++
+          } else {
+            if (!duplicatedResults.some(duplicatedResult => (duplicatedResult.title === result.title || duplicatedResult.doi === result.doi || duplicatedResult.pii === result.pii))) {
+              duplicatedResults.push(result)
+              newDuplicates++
+            }
+            duplicates++
+            allDuplicatedResults++
+          }
+        })
+        addToLog(`Houve ${added} resultados novos. ${duplicates} resultados já existentes foram ignorados. ${newDuplicates} novas duplicatas foram registradas.`)
+      } else {
+        addToLog(`Nenhum resultado encontrado para ${queries[index]}.`)
+      }
+
+      addToLog("\n")
+
+      if (index === queries.length - 1) {
+        saveFinalResults();
+        saveDuplicatedResults();
+      }
+    } catch (ex) {
+      console.log(ex.response.data)
+    }
+  }
+
 }
 
-function addToLog(message) {
-  console.log(message)
-  txtLog = txtLog + message + "\n"
-}
+//oldSearch()
+newSearch()
